@@ -92,7 +92,7 @@ make_kernel_image(){
 prepare_rootfs(){
 	if [ ! -d "${ROOTFS_PATH}" ]
 	then
-		echo "decompressing rootfs..."
+		echo " * decompressing rootfs..."
 		if [ ! -f rootfs_debian_i386.tar.gz ]
 		then
 			echo "fatal err! rootfs_debian_i386.tar.gz not found!"
@@ -104,16 +104,13 @@ prepare_rootfs(){
 			 clean && exit 1
 		fi
 	fi
-	# clean mount
-	# echo "" > "${ROOTFS_PATH}/etc/fstab" || true
-	# clean motd
-	# echo "" > "${ROOTFS_PATH}/etc/motd" || true
+
 	#  root/linux
 	# sed -i '1s#.*#root:$6$jFcaO798$gCSHZGAfpuWEAyO00ZlWzy1JLygVteL/e8oSm00nY7/gWTtk.xjb33kVaSLcERWGyByAd3T25Ih.iY9FLM0SJ/:19217:0:99999:7:::#'  "${ROOTFS_PATH}/etc/shadow"
 	echo "set user/passwd root/linux"
 	# hostname = linux6-i386
 	echo "linux6-i386" > "${ROOTFS_PATH}/etc/hostname"
-	echo "set hostname linux6-i386"
+	echo " * set hostname linux6-i386"
 }
 
 
@@ -157,18 +154,21 @@ build_rootfs(){
 
 	build_kernel_devel
 
-	echo "making image..."
+	echo " * making image..."
 	dd if=/dev/zero of=rootfs_debian_i386.ext4 bs=1M count=$rootfs_size
 	mkfs.ext4 -F rootfs_debian_i386.ext4
 	mkdir -p tmpmount
-	echo "copy data into rootfs..."
-	mount -t ext4 rootfs_debian_i386.ext4 tmpmount/ -o loop
+	echo " * copy data into rootfs..."
 	cp -af rootfs_debian_i386/* tmpmount/
-	umount ./tmpmount && sync && ls ./tmpmount && rmdir ./tmpmount
+	echo " * clean"
+	umount ./tmpmount
 	umount "${ROOTFS_IMAGE}" &> /dev/null
+	sync
 	chmod 644 rootfs_debian_i386.ext4
 	ls -alh rootfs_debian_i386.ext4
 	mv rootfs_debian_i386.ext4 "${ROOTFS_IMAGE}"
+	rm -rf tmpmount || ls ./tmpmount
+	rm -rf rootfs_debian_i386 || ls rootfs_debian_i386
 }
 
 run_qemu_debian(){
