@@ -23,7 +23,7 @@ usage() {
 	echo "  build_kernel: build the kernel image."
 	echo "  build_rootfs: build the rootfs image."
 	echo "  run: startup kernel with debian rootfs."
-	echo "  rebuild_rootfs: repacked ext3 rootfs."
+	echo "  rebuild_rootfs: repacked ext4 rootfs."
 	echo "  onekey: build kernel and rootfs, just run up."
 	echo "  run debug: enable gdb debug server."
 	exit
@@ -92,7 +92,7 @@ make_kernel_image(){
 prepare_rootfs(){
 	if [ ! -d "${ROOTFS_PATH}" ]
 	then
-		echo "decompressing rootfs..."
+		echo " * decompressing rootfs..."
 		if [ ! -f rootfs_debian_x86_64.tar.gz ]
 		then
 			echo "fatal err! rootfs_debian_x86_64.tar.gz not found!"
@@ -104,14 +104,6 @@ prepare_rootfs(){
 			 clean && exit 1
 		fi
 	fi
-	# clean mount
-	# echo "" > "${ROOTFS_PATH}/etc/fstab" || true
-	# clean motd
-	# echo "" > "${ROOTFS_PATH}/etc/motd" || true
-	#  root/linux
-	# sed -i '1s#.*#root:$6$jFcaO798$gCSHZGAfpuWEAyO00ZlWzy1JLygVteL/e8oSm00nY7/gWTtk.xjb33kVaSLcERWGyByAd3T25Ih.iY9FLM0SJ/:19217:0:99999:7:::#'  "${ROOTFS_PATH}/etc/shadow"
-	echo "set user/passwd root/linux"
-	# hostname = linux6-x64
 	echo "linux6-x64" > "${ROOTFS_PATH}/etc/hostname"
 	echo "set hostname linux6-x64"
 }
@@ -157,18 +149,28 @@ build_rootfs(){
 
 	build_kernel_devel
 
-	echo "making image..."
+	echo " * making image..."
 	dd if=/dev/zero of=rootfs_debian_x86_64.ext4 bs=1M count=$rootfs_size
 	mkfs.ext4 -F rootfs_debian_x86_64.ext4
 	mkdir -p tmpmount
-	echo "copy data into rootfs..."
-	mount -t ext3 rootfs_debian_x86_64.ext4 tmpmount/ -o loop
+	echo " * mount rootfs_debian_x86_64.ext4"
+	mount -t ext4 rootfs_debian_x86_64.ext4 tmpmount/ -o loop
+	if [ $? -ne 0 ]
+	then
+		echo "mount rootfs_debian_x86_64.ext4 failed! check it!"
+		exit 1
+	fi
+	echo " * copy data into rootfs..."
 	cp -af rootfs_debian_x86_64/* tmpmount/
-	umount ./tmpmount && sync && ls ./tmpmount && rmdir ./tmpmount
+	echo " * clean"
+	umount ./tmpmount
 	umount "${ROOTFS_IMAGE}" &> /dev/null
+	sync
 	chmod 644 rootfs_debian_x86_64.ext4
 	ls -alh rootfs_debian_x86_64.ext4
 	mv rootfs_debian_x86_64.ext4 "${ROOTFS_IMAGE}"
+	rm -rf tmpmount || ls ./tmpmount
+	rm -rf rootfs_debian_x86_64 || ls rootfs_debian_x86_64
 }
 
 run_qemu_debian(){
@@ -195,7 +197,7 @@ run_qemu_debian(){
 	# 	-m 2048 \
 	# 	-nographic ${SMP} ${DBG} \
 	# 	-kernel "${KERNEL_IMAGE}" \
-	# 	-append "console=ttyS0 crashkernel=256M root=/dev/sda rootfstype=ext3 rw loglevel=8 init=/bin/bash " \
+	# 	-append "console=ttyS0 crashkernel=256M root=/dev/sda rootfstype=ext4 rw loglevel=8 init=/bin/bash " \
 	# 	-drive file="${ROOTFS_IMAGE}",id=root-img,if=none,format=raw,cache=none \
 	# 	-device ide-hd,drive=root-img \
 	# 	-netdev user,id=mynet \
@@ -209,7 +211,7 @@ run_qemu_debian(){
 		-kernel "${KERNEL_IMAGE}" \
 		-drive if=none,file="${ROOTFS_IMAGE}",id=hd0 \
 	 	-device virtio-blk-pci,drive=hd0 \
-		-append "root=/dev/vda rw rootfstype=ext3 console=ttyS0 init=/sbin/init " \
+		-append "root=/dev/vda rw rootfstype=ext4 console=ttyS0 init=/sbin/init " \
 		-netdev user,id=vmnet \
 		-device virtio-net-pci,netdev=vmnet
 
@@ -222,7 +224,7 @@ run_qemu_debian(){
 	fi
 	# ${QEMU_APP} -m 1024\
 	# 	-nographic $SMP -kernel arch/x86/boot/bzImage \
-	# 	-append "noinintrd console=ttyS0 crashkernel=256M root=/dev/vda rootfstype=ext3 rw loglevel=8" \
+	# 	-append "noinintrd console=ttyS0 crashkernel=256M root=/dev/vda rootfstype=ext4 rw loglevel=8" \
 	# 	-drive if=none,file=rootfs_debian_x86_64.ext4,id=hd0 \
 	# 	-device virtio-blk-pci,drive=hd0 \
 	# 	-netdev user,id=mynet \
@@ -236,11 +238,13 @@ case $1 in
 	build_kernel)
 		make_kernel_image
 		;;
+
 	build_rootfs)
 		check_root
 		prepare_rootfs
 		build_rootfs
 		;;
+
 	rebuild_rootfs)
 		if [ -d "${ROOTFS_PATH}" ]
 		then
@@ -256,6 +260,7 @@ case $1 in
 		prepare_rootfs
 		build_rootfs
 		;;
+
 	run)
 		if [ ! -f "${KERNEL_IMAGE}" ]
 		then
@@ -275,6 +280,7 @@ case $1 in
 		ls -alh "${ROOTFS_IMAGE}"
 		run_qemu_debian
 		;;
+
 	onekey)
 		check_root
 		make_kernel_image
@@ -306,6 +312,7 @@ case $1 in
 		echo "using ${ROOTFS_IMAGE}"
 		run_qemu_debian
 		;;
+
 	*)
 		usage
 		;;

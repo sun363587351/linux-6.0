@@ -23,7 +23,7 @@ usage() {
 	echo "  build_kernel: build the kernel image."
 	echo "  build_rootfs: build the rootfs image."
 	echo "  run: startup kernel with debian rootfs."
-	echo "  rebuild_rootfs: repacked ext3 rootfs."
+	echo "  rebuild_rootfs: repacked ext4 rootfs."
 	echo "  onekey: build kernel and rootfs, just run up."
 	echo "  run debug: enable gdb debug server."
 	exit
@@ -162,7 +162,7 @@ build_rootfs(){
 	mkfs.ext4 -F rootfs_debian_i386.ext4
 	mkdir -p tmpmount
 	echo "copy data into rootfs..."
-	mount -t ext3 rootfs_debian_i386.ext4 tmpmount/ -o loop
+	mount -t ext4 rootfs_debian_i386.ext4 tmpmount/ -o loop
 	cp -af rootfs_debian_i386/* tmpmount/
 	umount ./tmpmount && sync && ls ./tmpmount && rmdir ./tmpmount
 	umount "${ROOTFS_IMAGE}" &> /dev/null
@@ -195,7 +195,7 @@ run_qemu_debian(){
 	# 	-m 2048 \
 	# 	-nographic ${SMP} ${DBG} \
 	# 	-kernel "${KERNEL_IMAGE}" \
-	# 	-append "console=ttyS0 crashkernel=256M root=/dev/sda rootfstype=ext3 rw loglevel=8 init=/bin/bash " \
+	# 	-append "console=ttyS0 crashkernel=256M root=/dev/sda rootfstype=ext4 rw loglevel=8 init=/bin/bash " \
 	# 	-drive file="${ROOTFS_IMAGE}",id=root-img,if=none,format=raw,cache=none \
 	# 	-device ide-hd,drive=root-img \
 	# 	-netdev user,id=mynet \
@@ -209,7 +209,7 @@ run_qemu_debian(){
 		-kernel "${KERNEL_IMAGE}" \
 		-drive if=none,file="${ROOTFS_IMAGE}",id=hd0 \
 	 	-device virtio-blk-pci,drive=hd0 \
-		-append "root=/dev/vda rw rootfstype=ext3 console=ttyS0 init=/sbin/init " \
+		-append "root=/dev/vda rw rootfstype=ext4 console=ttyS0 init=/sbin/init " \
 		-netdev user,id=vmnet \
 		-device virtio-net-pci,netdev=vmnet
 
@@ -222,7 +222,7 @@ run_qemu_debian(){
 	fi
 	# ${QEMU_APP} -m 1024\
 	# 	-nographic $SMP -kernel arch/x86/boot/bzImage \
-	# 	-append "noinintrd console=ttyS0 crashkernel=256M root=/dev/vda rootfstype=ext3 rw loglevel=8" \
+	# 	-append "noinintrd console=ttyS0 crashkernel=256M root=/dev/vda rootfstype=ext4 rw loglevel=8" \
 	# 	-drive if=none,file=rootfs_debian_i386.ext4,id=hd0 \
 	# 	-device virtio-blk-pci,drive=hd0 \
 	# 	-netdev user,id=mynet \
