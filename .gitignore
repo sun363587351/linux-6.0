@@ -1,3 +1,4 @@
+gdb.txt
 /build_output/*
 /build_rootfs/debootstrap*
 rootfs_debian_*
