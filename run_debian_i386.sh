@@ -10,7 +10,7 @@ export INSTALL_HDR_PATH=${WORKDIR}/rootfs_debian_i386/usr/
 KERNEL_BUILD=${WORKDIR}/rootfs_debian_i386/usr/src/linux/
 ROOTFS_PATH=${WORKDIR}/rootfs_debian_i386
 OUTPUTDIR=${WORKDIR}/build_output/${ARCH}
-ROOTFS_IMAGE=${OUTPUTDIR}/rootfs_debian_i386.ext3
+ROOTFS_IMAGE=${OUTPUTDIR}/rootfs_debian_i386.ext4
 KERNEL_IMAGE=${OUTPUTDIR}/bzImage
 
 rootfs_size=2048
@@ -158,17 +158,17 @@ build_rootfs(){
 	build_kernel_devel
 
 	echo "making image..."
-	dd if=/dev/zero of=rootfs_debian_i386.ext3 bs=1M count=$rootfs_size
-	mkfs.ext3 -F rootfs_debian_i386.ext3
+	dd if=/dev/zero of=rootfs_debian_i386.ext4 bs=1M count=$rootfs_size
+	mkfs.ext4 -F rootfs_debian_i386.ext4
 	mkdir -p tmpmount
 	echo "copy data into rootfs..."
-	mount -t ext3 rootfs_debian_i386.ext3 tmpmount/ -o loop
+	mount -t ext3 rootfs_debian_i386.ext4 tmpmount/ -o loop
 	cp -af rootfs_debian_i386/* tmpmount/
 	umount ./tmpmount && sync && ls ./tmpmount && rmdir ./tmpmount
 	umount "${ROOTFS_IMAGE}" &> /dev/null
-	chmod 644 rootfs_debian_i386.ext3
-	ls -alh rootfs_debian_i386.ext3
-	mv rootfs_debian_i386.ext3 "${ROOTFS_IMAGE}"
+	chmod 644 rootfs_debian_i386.ext4
+	ls -alh rootfs_debian_i386.ext4
+	mv rootfs_debian_i386.ext4 "${ROOTFS_IMAGE}"
 }
 
 run_qemu_debian(){
@@ -223,7 +223,7 @@ run_qemu_debian(){
 	# ${QEMU_APP} -m 1024\
 	# 	-nographic $SMP -kernel arch/x86/boot/bzImage \
 	# 	-append "noinintrd console=ttyS0 crashkernel=256M root=/dev/vda rootfstype=ext3 rw loglevel=8" \
-	# 	-drive if=none,file=rootfs_debian_i386.ext3,id=hd0 \
+	# 	-drive if=none,file=rootfs_debian_i386.ext4,id=hd0 \
 	# 	-device virtio-blk-pci,drive=hd0 \
 	# 	-netdev user,id=mynet \
 	# 	-device virtio-net-pci,netdev=mynet \
@@ -283,10 +283,10 @@ case $1 in
 			echo "clean rootfs_debian_i386"
 			rm -rf rootfs_debian_i386
 		fi
-		if [ -f rootfs_debian_i386.ext3 ]
+		if [ -f rootfs_debian_i386.ext4 ]
 		then
-			echo "clean rootfs_debian_i386.ext3"
-			rm -rf rootfs_debian_i386.ext3
+			echo "clean rootfs_debian_i386.ext4"
+			rm -rf rootfs_debian_i386.ext4
 		fi
 		prepare_rootfs
 		build_rootfs

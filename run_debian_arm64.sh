@@ -4,9 +4,9 @@ WORKDIR=$(pwd)
 JOBCOUNT=$(nproc)
 export ARCH=arm64
 export CROSS_COMPILE=aarch64-linux-gnu-
-export INSTALL_PATH=$LROOT/rootfs_debian_arm64/boot/
-export INSTALL_MOD_PATH=$LROOT/rootfs_debian_arm64/
-export INSTALL_HDR_PATH=$LROOT/rootfs_debian_arm64/usr/
+export INSTALL_PATH=${WORKDIR}/rootfs_debian_arm64/boot/
+export INSTALL_MOD_PATH=${WORKDIR}/rootfs_debian_arm64/
+export INSTALL_HDR_PATH=${WORKDIR}/rootfs_debian_arm64/usr/
 
 KERNEL_BUILD=${WORKDIR}/rootfs_debian_arm64/usr/src/linux/
 ROOTFS_PATH=${WORKDIR}/rootfs_debian_arm64

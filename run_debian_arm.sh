@@ -3,14 +3,17 @@
 WORKDIR=$(pwd)
 JOBCOUNT=$(nproc)
 export ARCH=arm
-export CROSS_COMPILE=aarch64-linux-gnu-
-export INSTALL_PATH=$LROOT/rootfs_debian_arm/boot/
-export INSTALL_MOD_PATH=$LROOT/rootfs_debian_arm/
-export INSTALL_HDR_PATH=$LROOT/rootfs_debian_arm/usr/
+export CROSS_COMPILE=arm-linux-gnueabi-
+export INSTALL_PATH=${WORKDIR}/rootfs_debian_arm/boot/
+export INSTALL_MOD_PATH=${WORKDIR}/rootfs_debian_arm/
+export INSTALL_HDR_PATH=${WORKDIR}/rootfs_debian_arm/usr/
 
 KERNEL_BUILD=${WORKDIR}/rootfs_debian_arm/usr/src/linux/
 ROOTFS_PATH=${WORKDIR}/rootfs_debian_arm
-ROOTFS_IMAGE=${WORKDIR}/rootfs_debian_arm.ext4
+OUTPUTDIR=${WORKDIR}/build_output/${ARCH}
+ROOTFS_IMAGE=${OUTPUTDIR}/rootfs_debian_arm.ext4
+KERNEL_IMAGE=${OUTPUTDIR}/zImage
+
 
 rootfs_size=2048
 SMP="-smp 4"
@@ -38,37 +41,59 @@ if [ $# -eq 2 ] && [ $2 == "debug" ]; then
 	SMP=""
 fi
 
+if [ ! -d "${OUTPUTDIR}" ]
+then
+	mkdir -p "${OUTPUTDIR}"
+fi
+
 make_kernel_image(){
-		echo "start build kernel image..."
-		make debian_defconfig
-		make -j $JOBCOUNT
+	echo "start build kernel image..."
+	make debian_defconfig
+	make -j "$JOBCOUNT"
+	ret=$?
+	echo "kernel build done![${ret}]"
+	if [ "${ret}" != "0" ]
+	then
+		echo "Build failed!"
+		clean && exit 1
+	fi
+	if [ -f arch/arm/boot/zImage ]
+	then
+		cp -a arch/arm/boot/zImage "${KERNEL_IMAGE}"
+		[ -f System.map ] && cp -a System.map "${OUTPUTDIR}"
+		[ -f vmlinux ] && cp -a vmlinux "${OUTPUTDIR}"
+		chmod 644 "${KERNEL_IMAGE}"
+		ls -alh "${KERNEL_IMAGE}"
+		which file &> /dev/null && file "${KERNEL_IMAGE}"
+	else
+		echo "${KERNEL_IMAGE} not found!"
+		clean && exit 1
+	fi
 }
 
 prepare_rootfs(){
-		if [ ! -d $rootfs_path ]; then
-			echo "decompressing rootfs..."
-			# split -d -b 80m rootfs_debian_arm.tar.xz -- rootfs_debian_arm.part 
-			cat rootfs_debian_arm.part0* > rootfs_debian_arm.tar.xz
-			tar -Jxf rootfs_debian_arm.tar.xz
-		fi
+	if [ ! -d "${ROOTFS_PATH}" ]; then
+		echo "decompressing rootfs..."
+		tar -xf rootfs_debian_arm.tar.gz
+	fi
 }
 
 build_kernel_devel(){
 	kernver="$(cat include/config/kernel.release)"
 	echo "kernel version: $kernver"
 
-	mkdir -p $kernel_build
+	mkdir -p "${KERNEL_BUILD}"
 	rm rootfs_debian_arm/lib/modules/$kernver/build
-	cp -a include $kernel_build
-	cp Makefile .config Module.symvers System.map vmlinux $kernel_build
-	mkdir -p $kernel_build/arch/arm/
-	mkdir -p $kernel_build/arch/arm/kernel/
+	cp -a include "${KERNEL_BUILD}"
+	cp Makefile .config Module.symvers System.map vmlinux "${KERNEL_BUILD}"
+	mkdir -p "${KERNEL_BUILD}"/arch/arm/
+	mkdir -p "${KERNEL_BUILD}"/arch/arm/kernel/
 
-	cp -a arch/arm/include $kernel_build/arch/arm/
-	cp -a arch/arm/Makefile $kernel_build/arch/arm/
-	cp arch/arm/kernel/module.lds $kernel_build/arch/arm/kernel/
+	cp -a arch/arm/include "${KERNEL_BUILD}"/arch/arm/
+	cp -a arch/arm/Makefile "${KERNEL_BUILD}"/arch/arm/
+	cp arch/arm/kernel/module.lds "${KERNEL_BUILD}"/arch/arm/kernel/
 
-	ln -s /usr/src/linux rootfs_debian_arm/lib/modules/$kernver/build
+	ln -s /usr/src/linux rootfs_debian_arm/lib/modules/"${kernver}"/build
 
 	# ln to debian linux-5.0/scripts
 	ln -s /usr/src/linux-kbuild/scripts rootfs_debian_arm/usr/src/linux/scripts
@@ -76,38 +101,38 @@ build_kernel_devel(){
 }
 
 check_root(){
-		if [ "$(id -u)" != "0" ];then
-			echo "superuser privileges are required to run"
-			echo "sudo ./run_debian_arm.sh build_rootfs"
-			exit 1
-		fi
+	if [ "$(id -u)" != "0" ];then
+		echo "superuser privileges are required to run"
+		echo "sudo ./run_debian_arm.sh build_rootfs"
+		exit 1
+	fi
 }
 
 update_rootfs(){
-	if [ ! -f $rootfs_image ]; then
+	if [ ! -f "${ROOTFS_IMAGE}" ]; then
 		echo "rootfs image is not present..., pls run build_rootfs"
 	else
 		echo "update rootfs ..."
 
-		mkdir -p $rootfs_path
+		mkdir -p "${ROOTFS_PATH}"
 		echo "mount ext4 image into rootfs_debian_arm"
-		mount -t ext4 $rootfs_image $rootfs_path -o loop
+		mount -t ext4 "${ROOTFS_IMAGE}" "${ROOTFS_PATH}" -o loop
 
 		make install
-		make modules_install -j $JOBCOUNT
+		make modules_install -j "${JOBCOUNT}"
 		#make headers_install
 
 		build_kernel_devel
 
-		umount $rootfs_path
-		chmod 777 $rootfs_image
+		umount "${ROOTFS_PATH}"
+		chmod 777 "${ROOTFS_IMAGE}"
 
-		rm -rf $rootfs_path
+		rm -rf "${ROOTFS_PATH}"
 	fi
 }
 
 build_rootfs(){
-	if [ ! -f $rootfs_image ]; then
+	if [ ! -f "${ROOTFS_IMAGE}" ]; then
 		make install
 		make modules_install -j $JOBCOUNT
 		# make headers_install
@@ -115,32 +140,41 @@ build_rootfs(){
 		build_kernel_devel
 
 		echo "making image..."
-		dd if=/dev/zero of=$rootfs_image bs=1M count=$rootfs_size
-		mkfs.ext4 $rootfs_image
+		dd if=/dev/zero of="${ROOTFS_IMAGE}" bs=1M count=$rootfs_size
+		mkfs.ext4 "${ROOTFS_IMAGE}"
 		mkdir -p tmpfs
 		echo "copy data into rootfs..."
-		mount -t ext4 $rootfs_image tmpfs/ -o loop
-		cp -af $rootfs_path/* tmpfs/
+		mount -t ext4 "${ROOTFS_IMAGE}" tmpfs/ -o loop
+		cp -af "${ROOTFS_PATH}"/* tmpfs/
 		umount tmpfs
-		chmod 777 $rootfs_image
+		chmod 777 "${ROOTFS_IMAGE}"
 
-		rm -rf $rootfs_path
+		rm -rf "${ROOTFS_PATH}"
 	fi
 }
 
 run_qemu_debian(){
-		cmd="$QEMU -m 1024 -cpu max,sve=on,sve256=on -M virt,gic-version=3,its=on,iommu=smmuv3\
-			-nographic $SMP -kernel arch/arm/boot/Image \
-			-append \"$kernel_arg $debug_arg $rootfs_arg $crash_arg $dyn_arg\"\
-			-drive if=none,file=$rootfs_image,id=hd0\
-			-device virtio-blk-device,drive=hd0\
-			--fsdev local,id=kmod_dev,path=./kmodules,security_model=none\
-			-device virtio-9p-pci,fsdev=kmod_dev,mount_tag=kmod_mount\
-			$DBG"
-		echo "running:"
-		echo $cmd
-		eval $cmd
 
+	# cmd="$QEMU -m 1024 -cpu max,sve=on,sve256=on -M virt,gic-version=3,its=on,iommu=smmuv3 \
+	# 	-nographic $SMP -kernel ${KERNEL_IMAGE} \
+	# 	-append \"$kernel_arg $debug_arg $rootfs_arg $crash_arg $dyn_arg\" \
+	# 	-drive if=none,file="${ROOTFS_IMAGE}",id=hd0 \
+	# 	-device virtio-blk-device,drive=hd0 \
+	# 	--fsdev local,id=kmod_dev,path=./kmodules,security_model=none \
+	# 	-device virtio-9p-pci,fsdev=kmod_dev,mount_tag=kmod_mount \
+	# 	$DBG"
+
+	cmd="$QEMU -m 800M \
+		-cpu cortex-a15 \
+		-M virt \
+		-nographic $SMP -kernel ${KERNEL_IMAGE} \
+		-append \"$kernel_arg $debug_arg $rootfs_arg $crash_arg $dyn_arg\" \
+		-drive if=none,file="${ROOTFS_IMAGE}",id=hd0 \
+		-device virtio-blk-device,drive=hd0 \
+		$DBG"
+	echo "running:"
+	echo "${cmd}"
+	eval $cmd
 }
 
 case $1 in
@@ -160,21 +194,18 @@ case $1 in
 	update_rootfs)
 		update_rootfs
 		;;
-	run)
 
-		if [ ! -f $LROOT/arch/arm/boot/Image ]; then
+	run)
+		if [ ! -f "${KERNEL_IMAGE}" ]; then
 			echo "canot find kernel image, pls run build_kernel command firstly!!"
 			exit 1
 		fi
-
-		if [ ! -f $rootfs_image ]; then
+		if [ ! -f "${ROOTFS_IMAGE}" ]; then
 			echo "canot find rootfs image, pls run build_rootfs command firstly!!"
 			exit 1
 		fi
-
-		#prepare_rootfs
-		#build_rootfs
 		run_qemu_debian
 		;;
 esac
 
+echo "All done! All is well!"
